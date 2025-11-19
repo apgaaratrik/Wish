@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>For Her | The Universe</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Italiana&family=Montserrat:wght@300;600&family=Playfair+Display:ital@1&display=swap" rel="stylesheet">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+    <style>
+        /* --- RESET --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { background: #000; overflow: hidden; width: 100vw; height: 100vh; font-family: 'Montserrat', sans-serif; color: white; }
+        
+        /* --- LAYERS --- */
+        #world { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: auto; }
+        
+        /* UI Container */
+        .ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            z-index: 10; pointer-events: none; /* Let clicks pass to canvas */
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 1s;
+        }
+        .ui-layer.active { display: flex; opacity: 1; }
+
+        /* --- PART 1: INTRO --- */
+        #ui-intro h1 {
+            font-family: 'Cinzel', serif; font-size: 12vw; letter-spacing: 5px; text-align: center;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.6); margin-bottom: 20px;
+        }
+        #trigger-zone {
+            width: 120px; height: 120px; border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: auto; /* CRITICAL: Allows clicking */
+            cursor: pointer; position: relative; margin-top: 50px;
+            background: rgba(0,0,0,0.3);
+        }
+        #trigger-fill { width: 0%; height: 0%; border-radius: 50%; background: #fff; box-shadow: 0 0 20px #fff; }
+        .hold-text { position: absolute; bottom: -40px; font-size: 0.9rem; letter-spacing: 2px; opacity: 0.8; width: 200px; text-align: center;}
+
+        /* --- PART 2: CEREMONY --- */
+        #ui-ceremony h1 { font-family: 'Italiana', serif; font-size: 3rem; color: #ffd700; text-shadow: 0 0 20px #ffd700; margin: 0; }
+        #ui-ceremony p { font-family: 'Cinzel'; font-size: 0.9rem; letter-spacing: 4px; margin-top: 10px; color: #ccc; }
+        
+        #skip-btn {
+            position: absolute; top: 20px; right: 20px; padding: 10px 20px;
+            border: 1px solid rgba(255,255,255,0.3); font-family: 'Cinzel'; font-size: 0.8rem;
+            pointer-events: auto; cursor: pointer; background: rgba(0,0,0,0.5); z-index: 100;
+        }
+        #breath-circle {
+            position: absolute; bottom: 15%; width: 100px; height: 100px; border-radius: 50%;
+            border: 1px solid rgba(255,215,0,0.5); display: none; justify-content: center; align-items: center;
+            pointer-events: auto; cursor: pointer; background: rgba(0,0,0,0.5);
+        }
+        #breath-core { width: 10px; height: 10px; background: #ffd700; border-radius: 50%; box-shadow: 0 0 20px #ffd700; }
+
+        /* --- PART 3: FINALE (SCROLL) --- */
+        #scroll-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 20; overflow-y: scroll; scroll-behavior: smooth;
+            display: none; /* Hidden until Part 3 */
+        }
+        .content-wrapper { width: 100%; min-height: 400vh; padding-top: 80vh; padding-bottom: 50vh; pointer-events: none; }
+        .text-block {
+            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+            padding: 30px; margin-bottom: 80vh; margin-left: 5%; width: 90%;
+            border-left: 3px solid #d4af37; transform: translateY(50px); opacity: 0;
+            transition: all 1s ease; pointer-events: auto; /* Allows text selection/interaction */
+        }
+        .text-block.visible { opacity: 1; transform: translateY(0); }
+        .text-block h2 { font-family: 'Playfair Display'; font-size: 2rem; color: #d4af37; margin-bottom: 10px; }
+        .text-block p { font-size: 1rem; line-height: 1.6; color: #eee; }
+
+        /* UTILS */
+        #white-flash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 999; }
+        #loader { position: fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index: 1000; display:flex; justify-content:center; align-items:center; font-family:'Cinzel'; color: #d4af37; }
+    </style>
+</head>
+<body>
+
+    <audio id="bg-music" loop>
+        <source src="https://assets.mixkit.co/music/preview/mixkit-stars-2142.mp3" type="audio/mp3">
+    </audio>
+
+    <canvas id="world"></canvas>
+    <div id="white-flash"></div>
+    <div id="loader">LOADING UNIVERSE...</div>
+
+    <div class="ui-layer active" id="ui-intro">
+        <h1>A STAR<br>IS BORN</h1>
+        <div id="trigger-zone">
+            <div id="trigger-fill"></div>
+            <div class="hold-text">HOLD TO IGNITE</div>
+        </div>
+    </div>
+
+    <div class="ui-layer" id="ui-ceremony">
+        <div id="skip-btn" onclick="MasterApp.skipCeremony()">SKIP &raquo;</div>
+        <h1 id="ceremony-title">The Arrival</h1>
+        <p id="ceremony-sub">INITIALIZING...</p>
+        <div id="breath-circle"><div id="breath-core"></div></div>
+    </div>
+
+    <div id="scroll-container">
+        <div class="content-wrapper">
+            <div class="text-block">
+                <h2>The Beginning</h2>
+                <p>
+                    I remember clearly when we first started this journey. The world felt so big, but you made it feel conquerable. Just like these stars forming a picture, my memories of you are vivid and bright.<br><br>
+                    Scroll down to see them come together.
+                </p>
+            </div>
+            <div class="text-block">
+                <h2>Strength</h2>
+                <p>
+                    Through the years, you've shown resilience that inspires me daily. When the universe was chaotic, you were the steady gravity holding everything in place.<br><br>
+                    Look at how the particles shift but never break. That is you.
+                </p>
+            </div>
+            <div class="text-block">
+                <h2>Forever</h2>
+                <p>
+                    Happy Birthday. As long as there are stars in the sky, I will be your biggest fan. I love you.<br><br>
+                    The Universe is yours today.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script type="x-shader/x-vertex" id="introVert">
+        uniform float uTime; uniform float uSpeed; attribute float aScale; varying vec3 vColor;
+        void main() {
+            vec3 pos = position;
+            pos.z = mod(position.z + (uTime * uSpeed * 50.0), 200.0) - 100.0;
+            if(uSpeed > 2.0) { float spiral = sin(length(pos.xy) * 0.2 - uTime * 5.0); pos.x += spiral * 2.0; pos.y += spiral * 2.0; }
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0); gl_Position = projectionMatrix * mvPosition;
+            gl_PointSize = aScale * (30.0 / -mvPosition.z) * (1.0 + uSpeed * 0.5);
+            vColor = mix(vec3(0.1, 0.3, 1.0), vec3(1.0, 0.8, 0.2), (pos.z + 100.0) / 200.0);
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="introFrag">
+        varying vec3 vColor; void main() {
+            float r = distance(gl_PointCoord, vec2(0.5)); if (r > 0.5) discard;
+            gl_FragColor = vec4(vColor, pow(1.0 - (r * 2.0), 2.0));
+        }
+    </script>
+
+    <script type="x-shader/x-vertex" id="finaleVert">
+        uniform float uSize; attribute vec3 aTarget; attribute vec3 aColor;
+        uniform float uTransition; uniform vec3 uMouse; varying vec3 vColor;
+        void main() {
+            vColor = aColor;
+            vec3 pos = mix(position, aTarget, uTransition);
+            float dist = distance(pos.xy, uMouse.xy);
+            float repulsion = 1.0 - smoothstep(0.0, 3.0, dist);
+            pos += normalize(pos - uMouse) * repulsion * 3.0;
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            gl_PointSize = uSize * (30.0 / -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="finaleFrag">
+        varying vec3 vColor; void main() {
+            float r = distance(gl_PointCoord, vec2(0.5)); if (r > 0.5) discard;
+            gl_FragColor = vec4(vColor, 1.0);
+        }
+    </script>
+
+    <script>
+        /**
+         * MASTER APPLICATION CONTROLLER
+         */
+        const MasterApp = {
+            phase: 0,
+            renderer: null,
+            
+            init: function() {
+                const canvas = document.getElementById('world');
+                this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                
+                document.getElementById('loader').style.display = 'none';
+                
+                // Start Phase 1
+                IntroEngine.init(this.renderer);
+                
+                // Global Audio Unlock
+                window.addEventListener('click', () => {
+                    const audio = document.getElementById('bg-music');
+                    if(audio.paused) { audio.volume = 0.2; audio.play(); }
+                }, {once:true});
+            },
+
+            nextPhase: function() {
+                this.phase++;
+                if(this.phase === 1) { // Intro -> Ceremony
+                    gsap.to('#ui-intro', { opacity: 0, duration: 0.5, onComplete: () => {
+                        document.getElementById('ui-intro').classList.remove('active');
+                        IntroEngine.dispose();
+                        CeremonyEngine.init(this.renderer);
+                        document.getElementById('ui-ceremony').classList.add('active');
+                    }});
+                } else if(this.phase === 2) { // Ceremony -> Finale
+                    gsap.to('#ui-ceremony', { opacity: 0, duration: 0.5, onComplete: () => {
+                        document.getElementById('ui-ceremony').classList.remove('active');
+                        CeremonyEngine.dispose();
+                        FinaleEngine.init(this.renderer);
+                        document.getElementById('scroll-container').style.display = 'block';
+                    }});
+                }
+            },
+            
+            skipCeremony: function() {
+                CeremonyEngine.skip();
+            }
+        };
+
+        /**
+         * PHASE 1: INTRO ENGINE
+         */
+        const IntroEngine = {
+            scene: null, camera: null, stars: null, uniforms: null, animId: null,
+            isHolding: false, energy: 0, exploded: false,
+
+            init: function(renderer) {
+                this.scene = new THREE.Scene();
+                this.scene.fog = new THREE.FogExp2(0x000000, 0.02);
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                this.camera.position.z = 0;
+
+                const count = 4000;
+                const pos = new Float32Array(count*3);
+                const scales = new Float32Array(count);
+                for(let i=0; i<count; i++) {
+                    const r = 5 + Math.random()*40;
+                    const theta = Math.random()*Math.PI*2;
+                    pos[i*3] = r*Math.cos(theta);
+                    pos[i*3+1] = r*Math.sin(theta);
+                    pos[i*3+2] = (Math.random()-0.5)*200;
+                    scales[i] = Math.random();
+                }
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+                geo.setAttribute('aScale', new THREE.BufferAttribute(scales,1));
+
+                this.uniforms = { uTime: {value:0}, uSpeed: {value:0.5} };
+                this.stars = new THREE.Points(geo, new THREE.ShaderMaterial({
+                    vertexShader: document.getElementById('introVert').textContent,
+                    fragmentShader: document.getElementById('introFrag').textContent,
+                    uniforms: this.uniforms,
+                    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+                }));
+                this.scene.add(this.stars);
+
+                this.setupEvents();
+                this.animate(renderer);
+            },
+
+            setupEvents: function() {
+                const zone = document.getElementById('trigger-zone');
+                const fill = document.getElementById('trigger-fill');
+                
+                const start = (e) => { 
+                    e.preventDefault(); if(this.exploded) return; 
+                    this.isHolding = true; 
+                    gsap.to(zone, {scale: 0.9, duration: 0.1});
+                };
+                const end = (e) => { 
+                    if(this.exploded) return; 
+                    this.isHolding = false; 
+                    gsap.to(fill, {width:'0%', height:'0%', duration:0.3});
+                    gsap.to(zone, {scale: 1, duration: 0.3});
+                    this.uniforms.uSpeed.value = 0.5;
+                };
+
+                zone.addEventListener('mousedown', start); zone.addEventListener('touchstart', start);
+                window.addEventListener('mouseup', end); window.addEventListener('touchend', end);
+            },
+
+            animate: function(renderer) {
+                this.animId = requestAnimationFrame(() => this.animate(renderer));
+                this.uniforms.uTime.value += 0.01;
+
+                if(this.isHolding && !this.exploded) {
+                    this.energy += 0.7;
+                    const pct = Math.min(this.energy, 100);
+                    document.getElementById('trigger-fill').style.width = pct+'%';
+                    document.getElementById('trigger-fill').style.height = pct+'%';
+                    this.uniforms.uSpeed.value = 0.5 + (this.energy/10);
+                    
+                    // Shake
+                    this.camera.position.x = (Math.random()-0.5)*(this.energy/200);
+                    this.camera.position.y = (Math.random()-0.5)*(this.energy/200);
+
+                    if(this.energy >= 100) {
+                        this.exploded = true;
+                        if(navigator.vibrate) navigator.vibrate(200);
+                        gsap.to('#white-flash', {opacity:1, duration:0.1, yoyo:true, repeat:1});
+                        gsap.to(this.uniforms.uSpeed, {value: 20, duration: 2, ease: "power2.in"});
+                        setTimeout(() => MasterApp.nextPhase(), 2000);
+                    }
+                } else if (!this.exploded) {
+                    this.energy = Math.max(0, this.energy - 2);
+                }
+                renderer.render(this.scene, this.camera);
+            },
+            dispose: function() { cancelAnimationFrame(this.animId); this.scene.clear(); }
+        };
+
+        /**
+         * PHASE 2: CEREMONY ENGINE
+         */
+        const CeremonyEngine = {
+            scene: null, camera: null, composer: null, animId: null,
+            objects: { knot: null, box: null, cake: null, orbs: [], flames: [] },
+            raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(),
+            state: { stage: 0, orbCount: 0, candlesLit: 0 },
+
+            init: function(renderer) {
+                renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                renderer.toneMappingExposure = 1.2;
+                
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x020205);
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
+                this.camera.position.set(0, 0, 12);
+
+                const renderPass = new THREE.RenderPass(this.scene, this.camera);
+                const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+                bloomPass.strength = 1.5; bloomPass.radius = 0.5;
+                
+                this.composer = new THREE.EffectComposer(renderer);
+                this.composer.addPass(renderPass);
+                this.composer.addPass(bloomPass);
+
+                this.buildWorld();
+                this.setupEvents();
+                this.animate();
+                this.nextStage();
+            },
+
+            buildWorld: function() {
+                const ambient = new THREE.AmbientLight(0xffffff, 0.2);
+                const spot = new THREE.SpotLight(0xffd700, 2);
+                spot.position.set(5, 10, 5);
+                this.scene.add(ambient, spot);
+
+                // Knot
+                this.objects.knot = new THREE.Mesh(
+                    new THREE.TorusKnotGeometry(1.5, 0.4, 100, 16),
+                    new THREE.MeshPhysicalMaterial({ color: 0xffd700, metalness: 1, roughness: 0.2 })
+                );
+                this.objects.knot.visible = false;
+                this.scene.add(this.objects.knot);
+
+                // Box
+                this.objects.box = new THREE.Mesh(
+                    new THREE.BoxGeometry(3, 3, 3),
+                    new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 0.9, roughness: 0, transparent: true })
+                );
+                this.objects.box.visible = false;
+                this.scene.add(this.objects.box);
+
+                // Cake
+                this.objects.cake = new THREE.Group();
+                const cMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 0.8, roughness: 0.1 });
+                this.objects.cake.add(new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 1, 32), cMat));
+                const top = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.8, 32), cMat);
+                top.position.y = 0.9;
+                this.objects.cake.add(top);
+
+                for(let i=0; i<5; i++) {
+                    const a = (i/5) * Math.PI*2;
+                    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6), new THREE.MeshStandardMaterial({color: 0xffd700}));
+                    stick.position.set(Math.cos(a)*0.8, 1.6, Math.sin(a)*0.8);
+                    // Hitbox
+                    stick.add(new THREE.Mesh(new THREE.BoxGeometry(0.5,1,0.5), new THREE.MeshBasicMaterial({visible:false})));
+                    
+                    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({color: 0xff5500}));
+                    flame.position.y = 0.4; flame.visible = false;
+                    flame.add(new THREE.PointLight(0xffaa00, 0, 3));
+                    stick.add(flame);
+                    
+                    this.objects.flames.push({mesh: flame, light: flame.children[0]});
+                    this.objects.cake.add(stick);
+                }
+                this.objects.cake.position.y = -10;
+                this.scene.add(this.objects.cake);
+            },
+
+            spawnOrbs: function() {
+                const geo = new THREE.SphereGeometry(0.6, 32, 32);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x0044ff, emissiveIntensity: 2 });
+                for(let i=0; i<5; i++) {
+                    const orb = new THREE.Mesh(geo, mat);
+                    orb.position.set((Math.random()-0.5)*5, (Math.random()-0.5)*4, (Math.random()-0.5)*2);
+                    orb.userData = { active: true };
+                    // Hitbox
+                    orb.add(new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshBasicMaterial({visible:false})));
+                    orb.scale.set(0,0,0);
+                    this.objects.orbs.push(orb);
+                    this.scene.add(orb);
+                    gsap.to(orb.scale, {x:1, y:1, z:1, duration: 0.5, delay: i*0.1});
+                }
+            },
+
+            updateHUD: function(t, s) {
+                const h1 = document.getElementById('ceremony-title');
+                const p = document.getElementById('ceremony-sub');
+                gsap.to([h1,p], {opacity:0, y:-10, duration:0.3, onComplete:()=>{
+                    h1.innerText = t; p.innerText = s;
+                    gsap.to([h1,p], {opacity:1, y:0, duration:0.5});
+                }});
+            },
+
+            nextStage: function() {
+                this.state.stage++;
+                const s = this.state.stage;
+                if(s===1) { this.updateHUD("The Gift", "TAP THE KNOT"); this.objects.knot.visible = true; gsap.from(this.objects.knot.scale, {x:0,y:0,z:0,duration:1}); }
+                else if(s===2) { this.updateHUD("The Mystery", "TOUCH THE CRYSTAL"); this.objects.box.visible = true; gsap.from(this.objects.box.position, {y:10,duration:1}); }
+                else if(s===3) { this.updateHUD("Memories", "TAP THE ORBS"); this.spawnOrbs(); setTimeout(()=>this.state.stage=4, 1000); }
+                else if(s===5) { this.updateHUD("Celebration", "WAIT FOR IT..."); gsap.to(this.objects.cake.position, {y:0, duration:2}); setTimeout(()=>this.nextStage(), 2500); }
+                else if(s===6) { this.updateHUD("Ignite", "LIGHT THE CANDLES"); }
+                else if(s===7) { this.updateHUD("Make a Wish", "HOLD BUTTON"); document.getElementById('breath-circle').style.display = 'flex'; gsap.from('#breath-circle', {scale:0, duration:0.5}); this.setupBreath(); }
+                else if(s===8) { this.updateHUD("It Is Done", "THE UNIVERSE AWAITS"); setTimeout(() => MasterApp.nextPhase(), 2000); }
+            },
+
+            setupEvents: function() {
+                const handler = (e) => {
+                    // Normalized coordinates
+                    let x, y;
+                    if(e.changedTouches) { x = e.changedTouches[0].clientX; y = e.changedTouches[0].clientY; } 
+                    else { x = e.clientX; y = e.clientY; e.preventDefault(); }
+                    
+                    this.mouse.x = (x / window.innerWidth) * 2 - 1;
+                    this.mouse.y = -(y / window.innerHeight) * 2 + 1;
+                    this.raycaster.setFromCamera(this.mouse, this.camera);
+                    
+                    const s = this.state.stage;
+                    
+                    // Logic per stage
+                    if(s===1 && this.raycaster.intersectObject(this.objects.knot).length) {
+                        gsap.to(this.objects.knot.scale, {x:0,y:0,z:0, duration:0.5}); this.nextStage();
+                    }
+                    else if(s===2 && this.raycaster.intersectObject(this.objects.box).length) {
+                        gsap.to(this.objects.box.scale, {x:2,y:2,z:2, opacity:0, duration:0.5}); this.objects.box.visible=false; this.nextStage();
+                    }
+                    else if(s===4) {
+                        // Check Orbs and their hitboxes
+                        const hits = this.raycaster.intersectObjects(this.objects.orbs, true);
+                        if(hits.length) {
+                            let obj = hits[0].object;
+                            if(obj.parent.userData.active) obj = obj.parent; // Hit the hitbox, get the parent
+                            if(obj.userData.active) {
+                                obj.userData.active = false; obj.visible = false; this.state.orbCount++;
+                                if(this.state.orbCount >= 5) this.nextStage();
+                            }
+                        }
+                    }
+                    else if(s===6 && this.raycaster.intersectObjects(this.objects.cake.children, true).length) {
+                         const unlit = this.objects.flames.find(f => !f.mesh.visible);
+                         if(unlit) {
+                             unlit.mesh.visible = true; unlit.light.intensity = 2;
+                             gsap.from(unlit.mesh.scale, {x:0,y:0,z:0, duration:0.5});
+                             this.state.candlesLit++;
+                             if(this.state.candlesLit >= 5) setTimeout(()=>this.nextStage(), 800);
+                         }
+                    }
+                };
+                window.addEventListener('mousedown', handler);
+                window.addEventListener('touchstart', handler, {passive:false});
+            },
+
+            setupBreath: function() {
+                const btn = document.getElementById('breath-circle');
+                const core = document.getElementById('breath-core');
+                let holding = false;
+                const start = (e) => { e.preventDefault(); if(this.state.stage===7) { holding=true; gsap.to(core, {scale:8, duration:2}); gsap.to(this.camera.position, {z:8, duration:2}); }};
+                const end = (e) => { 
+                    e.preventDefault(); if(holding) { holding=false; 
+                    if(gsap.getProperty(core, "scale") > 4) {
+                        document.getElementById('breath-circle').style.display = 'none';
+                        this.objects.flames.forEach(f => f.mesh.visible=false);
+                        gsap.to(this.camera.position, {z:12, duration:1});
+                        this.nextStage();
+                    } else {
+                        gsap.to(core, {scale:1, duration:0.5}); gsap.to(this.camera.position, {z:12, duration:1});
+                    }
+                }};
+                btn.addEventListener('mousedown', start); btn.addEventListener('touchstart', start);
+                btn.addEventListener('mouseup', end); btn.addEventListener('touchend', end);
+            },
+
+            skip: function() {
+                const s = this.state.stage;
+                if(s===1) { gsap.to(this.objects.knot.scale,{x:0,y:0,z:0,duration:0.2}); this.nextStage(); }
+                else if(s===2) { this.objects.box.visible=false; this.nextStage(); }
+                else if(s===3||s===4) { this.objects.orbs.forEach(o=>o.visible=false); this.state.orbCount=5; this.nextStage(); }
+                else if(s===5) { gsap.killTweensOf(this.objects.cake.position); this.objects.cake.position.y=0; this.nextStage(); }
+                else if(s===6) { this.objects.flames.forEach(f=>{f.mesh.visible=true;f.light.intensity=2;}); this.state.candlesLit=5; this.nextStage(); }
+                else if(s===7) { document.getElementById('breath-circle').style.display='none'; this.objects.flames.forEach(f=>f.mesh.visible=false); this.nextStage(); }
+            },
+
+            animate: function() {
+                this.animId = requestAnimationFrame(()=>this.animate());
+                const t = Date.now() * 0.001;
+                if(this.objects.knot.visible) { this.objects.knot.rotation.x = Math.sin(t)*0.5; this.objects.knot.rotation.y += 0.01; }
+                if(this.objects.box.visible) { this.objects.box.rotation.y = t*0.2; }
+                this.objects.orbs.forEach((o,i) => { if(o.visible) o.position.y += Math.sin(t*2+i)*0.005; });
+                this.objects.flames.forEach(f => { if(f.mesh.visible) f.light.intensity = 1.5 + Math.sin(t*10)*0.5; });
+                this.composer.render();
+            },
+
+            dispose: function() {
+                cancelAnimationFrame(this.animId);
+                this.scene.clear();
+                this.composer.dispose();
+            }
+        };
+
+        /**
+         * PHASE 3: FINALE ENGINE
+         */
+        const FinaleEngine = {
+            scene: null, camera: null, geometry: null, material: null, imageParticles: [], animId: null,
+            config: { images: [
+                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=500&q=60",
+                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=60",
+                "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=500&q=60"
+            ]},
+
+            init: function(renderer) {
+                renderer.toneMapping = THREE.NoToneMapping;
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                this.camera.position.z = 15;
+                
+                this.loadImages();
+                this.setupScroll();
+                this.animate(renderer);
+            },
+
+            loadImages: function() {
+                const loader = new THREE.TextureLoader();
+                loader.crossOrigin = "";
+                let loaded = 0;
+                
+                this.config.images.forEach((url, idx) => {
+                    loader.load(url, (tex) => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = 200; canvas.height = 200;
+                        ctx.drawImage(tex.image, 0, 0, 200, 200);
+                        const data = ctx.getImageData(0, 0, 200, 200).data;
+                        const particles = [];
+                        for(let y=0; y<200; y+=2) {
+                            for(let x=0; x<200; x+=2) {
+                                const i = (y*200 + x) * 4;
+                                if(data[i+3] > 128) {
+                                    particles.push({
+                                        x: (x/200)*10 - 5, y: -(y/200)*10 + 5, z: (Math.random()-0.5)*2,
+                                        r: data[i]/255, g: data[i+1]/255, b: data[i+2]/255
+                                    });
+                                }
+                            }
+                        }
+                        this.imageParticles[idx] = particles;
+                        loaded++;
+                        if(loaded === 3) this.createSystem();
+                    });
+                });
+            },
+
+            createSystem: function() {
+                let max = 0;
+                this.imageParticles.forEach(p => max = Math.max(max, p.length));
+                const pos = new Float32Array(max * 3);
+                const target = new Float32Array(max * 3);
+                const colors = new Float32Array(max * 3);
+                
+                const img1 = this.imageParticles[0];
+                for(let i=0; i<max; i++) {
+                    const p = img1[i % img1.length];
+                    pos[i*3] = (Math.random()-0.5)*30;
+                    pos[i*3+1] = (Math.random()-0.5)*30;
+                    pos[i*3+2] = (Math.random()-0.5)*30;
+                    target[i*3] = p.x; target[i*3+1] = p.y; target[i*3+2] = p.z;
+                    colors[i*3] = p.r; colors[i*3+1] = p.g; colors[i*3+2] = p.b;
+                }
+                
+                this.geometry = new THREE.BufferGeometry();
+                this.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                this.geometry.setAttribute('aTarget', new THREE.BufferAttribute(target, 3));
+                this.geometry.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+                
+                this.material = new THREE.ShaderMaterial({
+                    vertexShader: document.getElementById('finaleVert').textContent,
+                    fragmentShader: document.getElementById('finaleFrag').textContent,
+                    uniforms: { uSize: {value:3.0}, uTransition: {value:0}, uMouse: {value:new THREE.Vector3(99,99,0)} },
+                    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+                });
+                
+                this.scene.add(new THREE.Points(this.geometry, this.material));
+                gsap.to(this.material.uniforms.uTransition, { value: 1, duration: 3, ease: "power2.out" });
+            },
+
+            setupScroll: function() {
+                const container = document.getElementById('scroll-container');
+                const blocks = document.querySelectorAll('.text-block');
+                let currentImg = 0;
+                
+                container.onscroll = () => {
+                    blocks.forEach((b, i) => {
+                        const r = b.getBoundingClientRect();
+                        if(r.top < window.innerHeight*0.8 && r.bottom > 0) {
+                            b.classList.add('visible');
+                            if(currentImg !== i && this.imageParticles[i]) {
+                                currentImg = i;
+                                this.morph(i);
+                            }
+                        } else {
+                            b.classList.remove('visible');
+                        }
+                    });
+                    this.scene.rotation.y = container.scrollTop * 0.001;
+                };
+            },
+
+            morph: function(idx) {
+                const next = this.imageParticles[idx];
+                const attrs = this.geometry.attributes.aTarget.array;
+                const colors = this.geometry.attributes.aColor.array;
+                const max = attrs.length/3;
+                
+                // Update Buffer Data in Background
+                for(let i=0; i<max; i++) {
+                    const p = next[i % next.length];
+                    attrs[i*3] = p.x; attrs[i*3+1] = p.y; attrs[i*3+2] = p.z;
+                    colors[i*3] = p.r; colors[i*3+1] = p.g; colors[i*3+2] = p.b;
+                }
+                
+                // Animate Transition
+                this.material.uniforms.uTransition.value = 0;
+                this.geometry.attributes.aTarget.needsUpdate = true; 
+                this.geometry.attributes.aColor.needsUpdate = true; 
+                gsap.to(this.material.uniforms.uTransition, { value: 1, duration: 2 });
+            },
+
+            animate: function(renderer) {
+                requestAnimationFrame(() => this.animate(renderer));
+                renderer.render(this.scene, this.camera);
+            }
+        };
+
+        window.onload = () => MasterApp.init();
+    </script>
+</body>
+</html>
